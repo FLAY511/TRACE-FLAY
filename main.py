@@ -1,60 +1,86 @@
-import telebot
-import requests
 
-# Ganti token & ID dengan milikmu
-bot = telebot.TeleBot("7898409981:AAGbbwYLzQPRIXOZnpf6zCwPlA9Vcls9PtM")
-admin_id = "7932600874"
+import requests
+import telebot
+
+BOT_TOKEN = '7898409981:AAGbbwYLzQPRIXOZnpf6zCwPlA9Vcls9PtM'
+OWNER_ID = 7932600874
+bot = telebot.TeleBot(BOT_TOKEN)
+
+NUMVERIFY_API_KEY = 'demo'  # Ganti dengan API asli jika tersedia
+
+PLATFORMS = ["instagram.com", "twitter.com", "github.com", "tiktok.com", "facebook.com"]
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "🔍 Selamat datang di *TRACE-FLAY*\nKirim /help untuk melihat perintah.", parse_mode="Markdown")
+    if message.from_user.id != OWNER_ID:
+        return
+    bot.reply_to(message, "👋 Selamat datang di *CYBER FLAY OSINT Bot v2*\nKetik /help untuk bantuan.", parse_mode="Markdown")
 
 @bot.message_handler(commands=['help'])
-def help_cmd(message):
-    text = """
-📌 *Perintah Tersedia*:
-• /nomor <nomor> - Info nomor HP
-• /ip <alamat_ip> - Info IP Address
-• /cariuser <username> - Cek username (eksperimen)
-"""
-    bot.reply_to(message, text, parse_mode="Markdown")
-
-@bot.message_handler(commands=['nomor'])
-def nomor_handler(message):
-    try:
-        nomor = message.text.split()[1]
-        res = requests.get(f"https://htmlweb.ru/geo/api.php?json&telcod={nomor}")
-        data = res.json()
-        if "country" in data:
-            text = f"🌍 *Negara:* {data['country']['english']}\n🏙 *Wilayah:* {data['region']['english']}\n📱 *Operator:* {data['0']['oper']}"
-        else:
-            text = "❌ Gagal mengambil data. Pastikan format nomor benar."
-    except:
-        text = "⚠️ Gunakan format: /nomor 6281234567890"
-    bot.reply_to(message, text, parse_mode="Markdown")
-
-@bot.message_handler(commands=['ip'])
-def ip_handler(message):
-    try:
-        ip = message.text.split()[1]
-        res = requests.get(f"http://ip-api.com/json/{ip}")
-        data = res.json()
-        if data["status"] == "success":
-            text = f"🌍 *Negara:* {data['country']}\n🏙 *Kota:* {data['city']}\n📶 *ISP:* {data['isp']}"
-        else:
-            text = "❌ IP tidak ditemukan atau tidak valid."
-    except:
-        text = "⚠️ Gunakan format: /ip 8.8.8.8"
-    bot.reply_to(message, text, parse_mode="Markdown")
+def send_help(message):
+    if message.from_user.id != OWNER_ID:
+        return
+    bot.reply_to(message, (
+        "🧠 *Perintah OSINT:*\n"
+        "/cariuser <username> - Cek username di platform\n"
+        "/nomor <noHP> - Cek info nomor HP\n"
+        "/ip <alamat_ip> - Info lokasi IP"
+    ), parse_mode="Markdown")
 
 @bot.message_handler(commands=['cariuser'])
 def cari_user(message):
+    if message.from_user.id != OWNER_ID:
+        return
     try:
         username = message.text.split()[1]
-        text = f"🔍 Sedang mencari username: {username}...\n(Fitur ini belum sepenuhnya aktif)"
+        hasil = f"🔎 Username *{username}*:\n\n"
+        for platform in PLATFORMS:
+            url = f"https://{platform}/{username}"
+            r = requests.get(url)
+            status = "✅ Ada" if r.status_code == 200 else "❌ Tidak ditemukan"
+            hasil += f"- {platform}: {status}\n"
+        bot.reply_to(message, hasil, parse_mode="Markdown")
     except:
-        text = "⚠️ Gunakan format: /cariuser username"
-    bot.reply_to(message, text)
+        bot.reply_to(message, "Contoh: /cariuser rafkacyber")
 
-bot.send_message(admin_id, "🤖 TRACE-FLAY aktif.")
+@bot.message_handler(commands=['ip'])
+def ip_lookup(message):
+    if message.from_user.id != OWNER_ID:
+        return
+    try:
+        ip = message.text.split()[1]
+        r = requests.get(f"http://ip-api.com/json/{ip}").json()
+        if r['status'] == 'fail':
+            bot.reply_to(message, "IP tidak ditemukan.")
+            return
+        text = (
+            f"📡 IP: {ip}\nNegara: {r['country']}\nKota: {r['city']}\nISP: {r['isp']}\n"
+            f"Koordinat: {r['lat']}, {r['lon']}"
+        )
+        bot.reply_to(message, text)
+    except:
+        bot.reply_to(message, "Contoh: /ip 103.xxx.xxx")
+
+@bot.message_handler(commands=['nomor'])
+def nomor_lookup(message):
+    if message.from_user.id != OWNER_ID:
+        return
+    try:
+        nomor = message.text.split()[1].replace('+', '')
+        url = f"http://apilayer.net/api/validate?access_key={NUMVERIFY_API_KEY}&number={nomor}"
+        res = requests.get(url).json()
+        if not res.get('valid'):
+            bot.reply_to(message, "Nomor tidak valid atau tidak ditemukan.")
+            return
+        hasil = (
+            f"📱 Nomor: +{res['country_code']}{res['national_format']}\n"
+            f"Negara: {res['country_name']}\n"
+            f"Lokasi: {res['location']}\n"
+            f"Carrier: {res['carrier']}\n"
+            f"Line Type: {res['line_type']}"
+        )
+        bot.reply_to(message, hasil)
+    except:
+        bot.reply_to(message, "Contoh: /nomor 628xxxxxx")
+
 bot.polling()
